@@ -1,0 +1,127 @@
+#!/bin/bash
+
+VERSION=1.0
+PROG="$(basename $0)"
+
+RED="\033[31m"
+GREEN="\033[32m"
+YELLOW="\033[33m"
+RST="\033[0m"
+
+read -d '' USAGE << END
+usage: $PROG HOST [LOCALHOST]
+
+Call curl interactively on LOCALHOST and set HOST as host header.
+
+This program is mainly used to simulate requests to a host and to serve
+as a REPL/shell of kinds around cURL.
+
+Features:
+
+* automatically set Host header
+* prepend paths with slash
+* readline and history support
+* in interactive mode, prepend paths with cURL parameters:
+      --include /foo
+  will include the HTTP response headers in the answer.
+* in interactive mode, append commands to pipe the response to:
+      /foo | less
+  will let you read the response in your pager.
+      /foo.json | jq -r .some_field
+  will use the power of jq to only print relevant parts of a JSON payload.
+END
+
+HOST="$1"
+LOCALHOST="${2:-$HOST}"
+
+
+case $HOST in
+    "" | "-h" | "-?" | "--help" )
+        echo "$USAGE" >&2
+        if [[ ! $HOST ]]; then
+            exit 1
+        else
+            exit 0
+        fi
+        ;;
+    --version )
+        echo "$PROG $VERSION"
+        echo ""
+        echo "curl version used:"
+        curl --version
+        exit 0
+        ;;
+    http://* | https://* )
+        HOST="$(echo "$HOST" | sed 's/^https\?:\/\///')"
+        ;;
+esac
+
+
+# say hello
+echo -e "* connecting to $RED$LOCALHOST$RST pretending to ask $GREEN$HOST$RST"
+echo    "* keep input empty or write 'exit' to quit"
+echo    "* write '/' to get homepage"
+echo    "* prepend additional cURL parameters: '-v /'"
+echo    "  Commonly used:"
+echo    "  * -i, --include : include response headers"
+echo    "  * -k, --insecure : ignore SSL errors"
+echo    "  * -L, --location : follow redirects"
+echo    "  * -v, --verbose : print request headers, too"
+echo    "* append '| less' to pipe the output through 'less' (or any other program)"
+echo    ""
+
+
+# set up history
+export HISTFILE=$HOME/.curlsh.history
+touch "$HISTFILE"
+
+history -r
+
+
+# start main repl
+while read -d $'\n' -ep "$(echo -n -e "$GREEN${HOST:0:30} $YELLOW/$RST ")" _PATH; do
+    CURL_OPTS=
+    PIPETO=cat
+    case $_PATH in
+        "" | exit | quit | bye )
+            break 2
+            ;;
+    esac
+
+    history -s -- "$_PATH"
+
+    case $_PATH in
+        *\|* )
+            # split off pipe command
+            PIPETO="${_PATH##*|}"
+            # trim whitespace the haXor way:
+            _PATH="$(echo "${_PATH%|*}" | xargs)"
+            ;;
+    esac
+    case $_PATH in
+        -*\ * )
+            # split off extra curl parameters
+            CURL_OPTS="${_PATH% *}"
+            _PATH="${_PATH##* }"
+            ;;
+    esac
+    case $_PATH in
+        [^/]* )
+            # prepend slash if missing
+            _PATH="/$_PATH"
+            ;;
+    esac
+
+    curl \
+        --silent \
+        --show-error \
+        --user-agent "curlsh $VERSION" \
+        --header "Host: $HOST" \
+        $CURL_OPTS \
+        "$LOCALHOST$_PATH" | \
+        $PIPETO
+done
+
+
+# append to history on exit
+history -a
