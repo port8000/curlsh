@@ -3,10 +3,10 @@
 VERSION=1.0
 PROG="$(basename $0)"
 
-RED="\033[31m"
-GREEN="\033[32m"
-YELLOW="\033[33m"
-RST="\033[0m"
+RED=$'\033[31m'
+GREEN=$'\033[32m'
+YELLOW=$'\033[33m'
+RST=$'\033[0m'
 
 read -d '' USAGE << END
 usage: $PROG HOST [LOCALHOST]
@@ -33,6 +33,26 @@ END
 
 HOST="$1"
 LOCALHOST="${2:-$HOST}"
+NPARAM=$#
+PIPE_TO=cat
+CURL_OPTS="--silent --show-error"
+USER_AGENT="curlsh $VERSION (https://github.com/port8000/curlsh)"
+HISTFILE="$HOME/.curlsh.history"
+
+
+ALIAS() {
+    if [[ $1 == $HOST ]]; then
+        HOST="$2"
+        if [[ $NPARAM == 1 ]]; then
+            LOCALHOST="${3:-$HOST}"
+        fi
+    fi
+}
+
+
+if [[ -f $HOME/.curlshrc ]]; then
+    . "$HOME/.curlshrc"
+fi
 
 
 case $HOST in
@@ -58,30 +78,32 @@ esac
 
 
 # say hello
-echo -e "* connecting to $RED$LOCALHOST$RST pretending to ask $GREEN$HOST$RST"
-echo    "* keep input empty or write 'exit' to quit"
-echo    "* write '/' to get homepage"
-echo    "* prepend additional cURL parameters: '-v /'"
-echo    "  Commonly used:"
-echo    "  * -i, --include : include response headers"
-echo    "  * -k, --insecure : ignore SSL errors"
-echo    "  * -L, --location : follow redirects"
-echo    "  * -v, --verbose : print request headers, too"
-echo    "* append '| less' to pipe the output through 'less' (or any other program)"
-echo    ""
+echo "* connecting to $RED$LOCALHOST$RST pretending to ask $GREEN$HOST$RST"
+echo "* keep input empty or write 'exit' to quit"
+echo "* write '/' to get homepage"
+echo "* prepend additional cURL parameters: '-v /'"
+echo "  Commonly used:"
+echo "  * -i, --include : include response headers"
+echo "  * -k, --insecure : ignore SSL errors"
+echo "  * -L, --location : follow redirects"
+echo "  * -v, --verbose : print request headers, too"
+echo "* append '| less' to pipe the output through 'less' (or any other program)"
+echo ""
 
 
 # set up history
-export HISTFILE=$HOME/.curlsh.history
-touch "$HISTFILE"
+if [[ $HISTFILE ]]; then
+    export HISTFILE
+    touch "$HISTFILE"
 
-history -r
+    history -r
+fi
 
 
 # start main repl
-while read -d $'\n' -ep "$(echo -n -e "$GREEN${HOST:0:30} $YELLOW/$RST ")" _PATH; do
-    CURL_OPTS=
-    PIPETO=cat
+while read -d $'\n' -ep "$GREEN${HOST:0:30}$YELLOW/$RST " _PATH; do
+    CURRENT_CURL_OPTS=
+    CURRENT_PIPE_TO="$PIPE_TO"
     case $_PATH in
         "" | exit | quit | bye )
             break 2
@@ -93,7 +115,7 @@ while read -d $'\n' -ep "$(echo -n -e "$GREEN${HOST:0:30} $YELLOW/$RST ")" _PATH
     case $_PATH in
         *\|* )
             # split off pipe command
-            PIPETO="${_PATH##*|}"
+            CURRENT_PIPE_TO="${_PATH##*|}"
             # trim whitespace the haXor way:
             _PATH="$(echo "${_PATH%|*}" | xargs)"
             ;;
@@ -101,7 +123,7 @@ while read -d $'\n' -ep "$(echo -n -e "$GREEN${HOST:0:30} $YELLOW/$RST ")" _PATH
     case $_PATH in
         -*\ * )
             # split off extra curl parameters
-            CURL_OPTS="${_PATH% *}"
+            CURRENT_CURL_OPTS="${_PATH% *}"
             _PATH="${_PATH##* }"
             ;;
     esac
@@ -112,16 +134,16 @@ while read -d $'\n' -ep "$(echo -n -e "$GREEN${HOST:0:30} $YELLOW/$RST ")" _PATH
             ;;
     esac
 
-    curl \
-        --silent \
-        --show-error \
-        --user-agent "curlsh $VERSION" \
-        --header "Host: $HOST" \
-        $CURL_OPTS \
-        "$LOCALHOST$_PATH" | \
-        $PIPETO
+    curl --user-agent "$USER_AGENT" \
+         --header "Host: $HOST" \
+         $CURL_OPTS \
+         $CURRENT_CURL_OPTS \
+         "$LOCALHOST$_PATH" | \
+         $CURRENT_PIPE_TO
 done
 
 
 # append to history on exit
-history -a
+if [[ $HISTFILE ]]; then
+    history -a
+fi
