@@ -1,14 +1,14 @@
 #!/bin/bash
 
 VERSION=1.0
-PROG="$(basename $0)"
+PROG="$(basename "$0")"
 
 RED=$'\033[31m'
 GREEN=$'\033[32m'
 YELLOW=$'\033[33m'
 RST=$'\033[0m'
 
-read -d '' USAGE << END
+read -r -d '' USAGE << END
 usage: $PROG HOST [LOCALHOST]
 
 Call curl interactively on LOCALHOST and set HOST as host header.
@@ -34,14 +34,14 @@ END
 HOST="$1"
 LOCALHOST="${2:-$HOST}"
 NPARAM=$#
-PIPE_TO=cat
+PIPE_TO="cat"
 CURL_OPTS="--silent --show-error"
 USER_AGENT="curlsh $VERSION (https://github.com/port8000/curlsh)"
 HISTFILE="$HOME/.curlsh.history"
 
 
 ALIAS() {
-    if [[ $1 == $HOST ]]; then
+    if [[ $1 == "$HOST" ]]; then
         HOST="$2"
         if [[ $NPARAM == 1 ]]; then
             LOCALHOST="${3:-$HOST}"
@@ -101,7 +101,7 @@ fi
 
 
 # start main repl
-while read -d $'\n' -ep "$GREEN${HOST:0:30}$YELLOW/$RST " _PATH; do
+while read -r -d $'\n' -ep "$GREEN${HOST:0:30}$YELLOW/$RST " _PATH; do
     CURRENT_CURL_OPTS=
     CURRENT_PIPE_TO="$PIPE_TO"
     case $_PATH in
